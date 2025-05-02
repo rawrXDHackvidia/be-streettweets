@@ -5,6 +5,7 @@ import subprocess
 import requests
 import cloudinary
 import cloudinary.uploader
+import uuid
 from fastapi import FastAPI, Body, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,10 +15,18 @@ from transformers import pipeline, AutoModelForTokenClassification
 from io import BytesIO
 from dotenv import load_dotenv
 from datetime import datetime
+from supabase import create_client, Client
+
 
 # SETUP ---------------------------------------------------------------------
-# load_dotenv('.env.development')
-load_dotenv()
+# load_dotenv('.env.production')
+load_dotenv('.env.development')
+# load_dotenv()
+
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI()
 
@@ -180,6 +189,7 @@ async def poll_scrape():
 	crawl_response = json.loads(crawl_response.body)
 	text = crawl_response[0]['full_text']
 	image_url = crawl_response[0]['image_url']
+	username = crawl_response[0]['username']
 	
 	try:
 		location_response = await get_location(text)
@@ -188,8 +198,23 @@ async def poll_scrape():
 		damage_response = await detect_damage(image_url)	
 		damage_level = damage_response['damage_level']
 
+		report_id = str(uuid.uuid4())
+
+		data = {
+			"report_id": report_id,
+			"created_at": str(datetime.now()),
+			"username": username,
+			"image_url": image_url,
+			"location": location,
+			"severity": damage_level,
+			"status": 'validated'
+		}
+    	
+		response = supabase.table("reports").insert(data).execute()
+
 		return {
 			"message": "Report scraped from X and submitted succesfully!",
+			"report_id": report_id,
 			"text": text,
 			"image_url": image_url,
 			"location": location,
@@ -230,9 +255,42 @@ async def submit_report(
 			"locataion:" : location,
 		}
 
+	report_id = str(uuid.uuid4())
+
+	data = {
+		"report_id": report_id,
+		"created_at": str(datetime.now()),
+		"username": None,
+		"image_url": image_url,
+		"location": location,
+		"severity": damage_level,
+		"status": 'validated'
+	}
+	
+	response = supabase.table("reports").insert(data).execute()
+
 	return JSONResponse({
 		"message": "Report submitted successfully!",
+		"report_id": report_id,
 		"image_url": image_url,	
 		"location": location,
 		"damage_level": damage_level,
 	})
+
+@app.get('/get-all-reports')
+def get_all_reports():
+	response = supabase.table("reports").select("*").execute()
+	data = response.data
+
+	return JSONResponse(content=data, status_code=200)
+
+@app.post('/get-report-by-id')
+def get_report_by_id(report_id: str = Body(...)):
+
+	response = supabase.table("reports").select("*").eq("report_id", report_id).execute()
+	data = response.data
+
+	if data:
+		JSONResponse(content=data[0], status_code=200)
+	else:
+		JSONResponse(content={"message": "No matching reports found."}, status_code=404)
