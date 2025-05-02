@@ -1,12 +1,12 @@
 import os
 import csv
+import json
 import subprocess
 import requests
 import cloudinary
 import cloudinary.uploader
 from fastapi import FastAPI, Body, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from os import environ as env
 from fastapi.responses import JSONResponse
 from ultralytics import YOLO
 from PIL import Image, ImageDraw
@@ -16,23 +16,25 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 # SETUP ---------------------------------------------------------------------
-load_dotenv()
+load_dotenv('.env.development') # NOTE: delete name later
 
 app = FastAPI()
 
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+	CORSMiddleware,
+	allow_origins=["*"],
+	allow_credentials=True,
+	allow_methods=["*"],
+	allow_headers=["*"],
 )
 
 cloudinary.config(
-    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-    api_key=os.getenv("CLOUDINARY_API_KEY"),
-    api_secret=os.getenv("CLOUDINARY_API_SECRET")
+	cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+	api_key=os.getenv("CLOUDINARY_API_KEY"),
+	api_secret=os.getenv("CLOUDINARY_API_SECRET")
 )
+
+TWITTER_AUTH_TOKEN = os.getenv("TWITTER_AUTH_TOKEN")
 
 # model for road damage detection
 cv_model = YOLO('yolov8x-world.pt')
@@ -104,7 +106,7 @@ async def get_location(text: str = Body(...)):
 		if r["entity_group"] in ("LOC", "LOCATION")
 	]
 	 
-	return {"location": " ".join(location_names)}
+	return {"location": location_names[0]}
 
 @app.post("/detect-damage")
 async def detect_damage(image_url: str = Body(...)):
@@ -150,28 +152,86 @@ async def detect_damage(image_url: str = Body(...)):
 		if top_prediction == 'sinkhole':
 			damage_level = 'severe'
 		
-		return JSONResponse(content={"damage_level": damage_level})
+		return {"damage_level": damage_level}
 	else:
 		return {"message": "No damage detected."}
 
+@app.get("/crawl_tweets")
+def crawl_tweets(
+	keyword: str = Query(..., description="Keyword Twitter, misal: #jalanrusak"),
+	since: str = Query("2023-01-01"),
+	until: str = Query("2025-04-30"),
+	limit: int = Query(10)
+):
+	filename = "tweets-data/street_tweets.csv"
+	query = f"{keyword} since:{since} until:{until}"
+
+	success, msg = run_tweet_harvest(query, limit, filename)
+	
+	with open(filename, newline='', encoding='utf-8') as csvfile:
+		reader = csv.DictReader(csvfile)
+		data = list(reader)
+	return JSONResponse(content=data, status_code=200)
+
+@app.get("/poll-scrape")
+async def poll_scrape():
+	crawl_response = crawl_tweets('#jalanrusak')
+	crawl_response = json.loads(crawl_response.body)
+	text = crawl_response[0]['full_text']
+	image_url = crawl_response[0]['image_url']
+	
+	try:
+		location_response = await get_location(text)
+		location = location_response['location']
+
+		damage_response = await detect_damage(image_url)	
+		damage_level = damage_response['damage_level']
+
+		return {
+			"message": "Report scraped from X and submitted succesfully!",
+			"text": text,
+			"image_url": image_url,
+			"location": location,
+			"damage_level": damage_level,
+		}
+
+	except: 
+		return {
+			"message": "Invalid report. Report must have location in text and photo of damaged road.",
+			"text": text,
+			"image_url": image_url,
+		}
+
 @app.post("/submit_report")
 async def submit_report(
-    location: str = Form(...),
-    image: UploadFile = File(...)
+	location: str = Form(...),
+	image: UploadFile = File(...)
 ):
-    contents = await image.read()
-    temp_filename = f"temp_{datetime.now().timestamp()}_{image.filename}"
-    with open(temp_filename, "wb") as f:
-        f.write(contents)
+	contents = await image.read()
+	temp_filename = f"temp_{datetime.now().timestamp()}_{image.filename}"
+	with open(temp_filename, "wb") as f:
+		f.write(contents)
 
-    try:
-        upload_result = cloudinary.uploader.upload(temp_filename)
-        image_url = upload_result.get("secure_url")
-    finally:
-        os.remove(temp_filename)
+	image_url = ''
+	try:
+		upload_result = cloudinary.uploader.upload(temp_filename)
+		image_url = upload_result.get("secure_url")
+	finally:
+		os.remove(temp_filename)
 
-    return JSONResponse({
-        "message": "Report submitted successfully!",
-        "location": location,
-        "url": image_url
-    })
+	try:
+		damage_response = await detect_damage(image_url)	
+		damage_level = damage_response['damage_level']
+	except:
+		return {
+			"message": "Invalid report. Report must have a photo of the damaged road.",
+			"image_url": image_url,
+			"locataion:" : location,
+		}
+
+	return JSONResponse({
+		"message": "Report submitted successfully!",
+		"image_url": image_url,	
+		"location": location,
+		"damage_level": damage_level,
+	})
