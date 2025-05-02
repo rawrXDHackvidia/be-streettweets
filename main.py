@@ -32,7 +32,7 @@ app = FastAPI()
 
 app.add_middleware(
 	CORSMiddleware,
-	allow_origins=["*"],
+	allow_origins=["http://localhost:3000"],
 	allow_credentials=True,
 	allow_methods=["*"],
 	allow_headers=["*"],
@@ -166,7 +166,7 @@ async def detect_damage(image_url: str = Body(...)):
 	else:
 		return {"message": "No damage detected."}
 
-@app.get("/crawl_tweets")
+@app.post("/crawl_tweets")
 def crawl_tweets(
 	keyword: str = Query(..., description="Keyword Twitter, misal: #jalanrusak"),
 	since: str = Query("2023-01-01"),
@@ -183,7 +183,7 @@ def crawl_tweets(
 		data = list(reader)
 	return JSONResponse(content=data, status_code=200)
 
-@app.get("/poll-scrape")
+@app.post("/poll-scrape")
 async def poll_scrape():
 	crawl_response = crawl_tweets('#jalanrusak')
 	crawl_response = json.loads(crawl_response.body)
@@ -277,12 +277,12 @@ async def submit_report(
 		"damage_level": damage_level,
 	})
 
-@app.get('/get-all-reports')
+@app.post('/get-all-reports')
 def get_all_reports():
 	response = supabase.table("reports").select("*").execute()
 	data = response.data
 
-	return JSONResponse(content=data, status_code=200)
+	return JSONResponse(data)
 
 @app.post('/get-report-by-id')
 def get_report_by_id(report_id: str = Body(...)):
