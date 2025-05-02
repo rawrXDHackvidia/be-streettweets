@@ -16,7 +16,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 # SETUP ---------------------------------------------------------------------
-load_dotenv('.env.development') # NOTE: delete name later
+# load_dotenv('.env.development')
+load_dotenv()
 
 app = FastAPI()
 
@@ -136,9 +137,9 @@ async def detect_damage(image_url: str = Body(...)):
 				"confidence": conf,
 				"bbox": xyxy
 			})
-			
-	save_path = "detected_image.png"
-	pil_image.save(save_path)
+
+	# save_path = "detected_image.png"
+	# pil_image.save(save_path)
 	
 	if detections:
 		top_prediction = detections[0]['label']
