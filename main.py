@@ -20,8 +20,8 @@ from supabase import create_client, Client
 
 # SETUP ---------------------------------------------------------------------
 # load_dotenv('.env.production')
-load_dotenv('.env.development')
-# load_dotenv()
+# load_dotenv('.env.development')
+load_dotenv()
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
@@ -285,12 +285,12 @@ def get_all_reports():
 	return JSONResponse(data)
 
 @app.post('/get-report-by-id')
-def get_report_by_id(report_id: str = Body(...)):
+def get_report_by_id(report_id: str):
 
 	response = supabase.table("reports").select("*").eq("report_id", report_id).execute()
 	data = response.data
 
 	if data:
-		JSONResponse(content=data[0], status_code=200)
+		return JSONResponse(content=data[0], status_code=200)
 	else:
-		JSONResponse(content={"message": "No matching reports found."}, status_code=404)
+		return JSONResponse(content={"message": "No matching reports found."}, status_code=404)
