@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from ultralytics import YOLO
 from PIL import Image, ImageDraw
-from transformers import pipeline, AutoModelForTokenClassification
+from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
 from io import BytesIO
 from dotenv import load_dotenv
 from datetime import datetime
@@ -50,17 +50,19 @@ TWITTER_AUTH_TOKEN = os.getenv("TWITTER_AUTH_TOKEN")
 cv_model = YOLO('yolov8x-world.pt')
 cv_model.set_classes(["sinkhole", "pothole", "crack"])
 
-# model for NER
+# model for NER and label mapping
 NER_MODEL = "cahya/bert-base-indonesian-NER"
+HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
+tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_auth_token=HF_TOKEN)
+model = AutoModelForTokenClassification.from_pretrained(NER_MODEL, use_auth_token=HF_TOKEN)
 ner = pipeline(
 	"ner",
 	model=NER_MODEL,
 	tokenizer=NER_MODEL,
-	aggregation_strategy="simple"
+	aggregation_strategy="simple",
 )
 
 # model for label_mapping
-model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
 id2label = model.config.id2label
 
 # UTILS ---------------------------------------------------------------------

@@ -9,6 +9,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
+RUN python -c "from transformers import AutoModelForTokenClassification, AutoTokenizer; \
+               AutoModelForTokenClassification.from_pretrained('cahya/bert-base-indonesian-NER'); \
+               AutoTokenizer.from_pretrained('cahya/bert-base-indonesian-NER')"
+
 COPY . .
 
 EXPOSE 8000
