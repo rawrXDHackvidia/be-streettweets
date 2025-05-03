@@ -6,6 +6,7 @@ import requests
 import cloudinary
 import cloudinary.uploader
 import uuid
+import asyncio
 from fastapi import FastAPI, Body, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,6 +17,8 @@ from io import BytesIO
 from dotenv import load_dotenv
 from datetime import datetime
 from supabase import create_client, Client
+from apscheduler.schedulers.background import BackgroundScheduler
+
 
 
 # SETUP ---------------------------------------------------------------------
@@ -100,6 +103,24 @@ def run_tweet_harvest(search_keyword: str, limit: int, output_filename: str):
 		return True, "Success"
 	except Exception as e:
 		return False, str(e)
+	
+def start_scheduler():
+	scheduler = BackgroundScheduler()
+
+	def run_poll_scrape():
+		try:
+			print("Running poll_scrape()...")
+			asyncio.run(poll_scrape())
+		except Exception as e:
+			print(f"poll_scrape failed: {e}")
+
+	scheduler.add_job(run_poll_scrape, 'interval', minutes=5)
+	scheduler.start()
+
+@app.on_event("startup")
+def on_startup():
+	start_scheduler()
+
 # APIs ---------------------------------------------------------------------
 
 @app.get('/')
