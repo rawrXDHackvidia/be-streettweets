@@ -208,7 +208,7 @@ def crawl_tweets(
 
 @app.post("/poll-scrape")
 async def poll_scrape():
-	crawl_response = crawl_tweets('#jalanrusak')
+	crawl_response = crawl_tweets('#XMarksTheStreet')
 	crawl_response = json.loads(crawl_response.body)
 	text = crawl_response[0]['full_text']
 	image_url = crawl_response[0]['image_url']
